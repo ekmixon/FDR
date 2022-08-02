@@ -81,19 +81,11 @@ class FDRConnector:  # pylint: disable=R0902
                 if config["Destination Data"]["REMOVE_LOCAL_FILE"]:
                     # Should we remove local files after we upload them?
                     remove = config["Destination Data"]["REMOVE_LOCAL_FILE"]
-                    if remove.lower() in "true,yes".split(","):  # pylint: disable=R1703
-                        self.remove_local_file = True
-                    else:
-                        self.remove_local_file = False
-
+                    self.remove_local_file = remove.lower() in "true,yes".split(",")
                 if config["Destination Data"]["IN_MEMORY_TRANSFER_ONLY"]:
                     # Transfer to S3 without using the local file system?
                     mem_trans = config["Destination Data"]["IN_MEMORY_TRANSFER_ONLY"]
-                    if mem_trans.lower() in "true,yes".split(","):  # pylint: disable=R1703
-                        self.in_memory_transfer_only = True
-                    else:
-                        self.in_memory_transfer_only = False
-
+                    self.in_memory_transfer_only = mem_trans.lower() in "true,yes".split(",")
         except KeyError:
             pass
 
@@ -119,9 +111,11 @@ def clean_exit(stat, signal, frame):  # pylint: disable=W0613
 
 def handle_file(path, key, file_object=None):
     """If configured, upload this file to our target bucket and remove it."""
-    # If we've defined a target bucket
     if FDR.target_bucket_name:
-        if not file_object:
+        if file_object:
+            s3_target.upload_fileobj(file_object, FDR.target_bucket_name, key)
+            logger.info('Uploaded file to path %s', key)
+        else:
             # Open our local file (binary)
             with open(path, 'rb') as data:
                 # Perform the upload to the same key in our target bucket
@@ -142,9 +136,6 @@ def handle_file(path, key, file_object=None):
                 if FDR.output_path not in pure.parent.parent.parent.name:
                     os.rmdir(pure.parent.parent.parent)
                     logger.info("Removed %s", pure.parent.parent.parent)
-        else:
-            s3_target.upload_fileobj(file_object, FDR.target_bucket_name, key)
-            logger.info('Uploaded file to path %s', key)
     # We're done
     return True
 
@@ -245,12 +236,7 @@ if __name__ == '__main__':
     # Parse any parameters passed at runtime
     args = parser.parse_args()
     # If we were not provided a configuration file name
-    if not args.config_file:
-        # Use the default name / location provided in our repo
-        CONFIG_FILE = "../falcon_data_replicator.ini"
-    else:
-        # Use the configuration file provided at runtime
-        CONFIG_FILE = args.config_file
+    CONFIG_FILE = args.config_file or "../falcon_data_replicator.ini"
     # Read in our configuration parameters
     configuration = configparser.ConfigParser()
     configuration.read(CONFIG_FILE)
